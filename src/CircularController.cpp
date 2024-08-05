@@ -21,7 +21,6 @@ CircularController::CircularController(mc_rbdyn::RobotModulePtr rm, double dt, c
 
   R_=0.15;
   omega_= 3;
-  init_ = false;
 
   postureTask = std::make_shared<mc_tasks::PostureTask>(solver(), robot().robotIndex(), 5, 1);
   // postureTask->stiffness(3);
@@ -47,18 +46,19 @@ CircularController::CircularController(mc_rbdyn::RobotModulePtr rm, double dt, c
                     mc_rtc::gui::Button("Torque", [this]() { datastore().assign<std::string>("ControlMode", "Torque"); }));
 
   gui()->addElement({"Tasks"},
-    mc_rtc::gui::Checkbox("Circular Moving", this->start_moving_)
+    mc_rtc::gui::Checkbox("Circular Moving", start_moving_)
   );
 
-  logger().addLogEntry("ControlMode",
+  logger().addLogEntry("IMU Accel",
                        [this]()
                        {
-                         auto mode = datastore().get<std::string>("ControlMode");
-                         if(mode.compare("") == 0) return 0;
-                         if(mode.compare("Position") == 0) return 1;
-                         if(mode.compare("Velocity") == 0) return 2;
-                         if(mode.compare("Torque") == 0) return 3;
-                         return 0;
+                         return robot().bodySensor("Accelerometer").linearAcceleration();
+                       });
+
+  logger().addLogEntry("IMU Gyro",
+                       [this]()
+                       {
+                         return robot().bodySensor("Accelerometer").angularVelocity();
                        });
 
   mc_rtc::log::success("CircularController init done");
@@ -67,10 +67,7 @@ CircularController::CircularController(mc_rbdyn::RobotModulePtr rm, double dt, c
 bool CircularController::run()
 { 
   ctlTime_ += timeStep;
-  if (ctlTime_ > 3) {init_=true; datastore().assign<std::string>("ControlMode", "Torque");}
-  if (ctlTime_ > 7.2) {start_moving_=true;postureTask->stiffness(0); postureTask->damping(5);}
-  if (ctlTime_ > 15) {datastore().assign<std::string>("Coriolis", "no");}
-  if (start_moving_ && init_) { 
+  if (start_moving_ ) { 
     circularTask->positionTask->position(Eigen::Vector3d(0.55, R_*std::sin(omega_*ctlTime_), 0.4 + R_*std::cos(omega_*ctlTime_))),
     circularTask->positionTask->refVel(Eigen::Vector3d(0, R_*omega_*std::cos(omega_*ctlTime_), -R_*omega_*std::sin(omega_*ctlTime_))),
     circularTask->positionTask->refAccel(Eigen::Vector3d(0, -R_*R_*omega_*std::sin(omega_*ctlTime_), R_*R_*omega_*std::cos(omega_*ctlTime_))), 
